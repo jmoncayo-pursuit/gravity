@@ -2,7 +2,7 @@
    GRAVITY — Dashboard Client Logic
    ============================================================ */
 
-const API = '';  // Same origin
+const API = window.location.origin;  // Same origin
 
 // ─── State ───────────────────────────────────────────────────
 let currentType = 'artifact';
@@ -145,6 +145,7 @@ els.btnDoubleCheck.addEventListener('click', async () => {
 
 // ─── Display Analysis Results ────────────────────────────────
 function displayAnalysis(data) {
+  els.resultsBody.innerHTML = ''; // Keep fresh results only
   els.emptyState.classList.add('hidden');
 
   // Show flags
