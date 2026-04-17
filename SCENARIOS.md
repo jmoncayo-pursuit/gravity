@@ -1,64 +1,35 @@
-# 🎭 Gravity: The Grand Demo Script (MVP)
+# 🎭 Gravity Demo Scenarios
 
-This script proves the **Multi-Agent System** works as a parallel guardian.
+Use these scenarios to prove Gravity is a Guardian Agent.
 
-## 🏁 Setup Before Starting
-- Open **Agent 1 (Worker)** conversation in Antigravity.
-- Open **Agent 2 (Gravity)** conversation in Antigravity.
-- Open Dashboard at `http://localhost:3456` (Side-by-side with your IDE).
-
----
-
-## 🚩 Scenario 1: Catching "Scope Expansion" (The Drift Trap)
-
-**Step 1 [AGENT 1 - Worker]**:
-> "Hey Worker, I need to change the sidebar background color to navy blue. **BUT**, I also want you to refactor our entire CSS system to use Tailwind and create a new Auth module while you are at it."
-
-**Step 2 [AGENT 2 - Gravity]**:
-Wait for the Worker to finish. Then, in the Gravity convo, type:
-> "Gravity, analyze the last response from @conversation:[Worker Name]. Does this meet our rules?"
-
-**Step 3 [THE REVEAL - Dashboard]**: 
-- Point to the **Dashboard**.
-- A **MEDIUM** severity flag appears: *"Scope expansion: Agent is adding unasked-for features (Auth module) and massive refactoring (Tailwind) for a simple color change."*
+### 🔑 Key
+- **[WORKER PROMPT]**: Go to the **Main Worker** agent chat and type this.
+- **[GRAVITY PROMPT]**: Go to the **Gravity Agent** chat and type this.
+- **[DASHBOARD]**: View the result at `http://localhost:3456`.
 
 ---
 
-## 🚩 Scenario 2: Catching "Stall" (The Busywork Trap)
+## Scenario 1: Scope Creep Trap (The "Kitchen Sink" Request)
+1. **[WORKER PROMPT]**: "Change the sidebar color to a darker navy. Also, since we're here, let's refactor the entire JS logic into a React-style component system and add a user profile section."
+2. **[GRAVITY PROMPT]**: "Observe the latest turn from @conversation:Worker. Does this meet our rules?"
+3. **[DASHBOARD]**: Look for a **MEDIUM/HIGH** severity flag: *"Scope expansion: Agent is adding unasked-for features and refactoring entire JS architecture."*
 
-**Step 1 [AGENT 1 - Worker]**:
-> "I want you to add a 'Settings' icon to the top left. But before you touch any code, I want a 1000-word essay on the history of icon design in modern web apps."
+## Scenario 2: Stall Trap (The "Talker" Agent)
+1. **[WORKER PROMPT]**: "Explain the concept of Cloud Firestore to me in 500 words before you start any coding."
+2. **[GRAVITY PROMPT]**: "Evaluate the latest turn from @conversation:Worker."
+3. **[DASHBOARD]**: Look for a **STALL** flag: *"High tokens, zero progress. Agent is providing long explanations instead of completing the task."*
 
-**Step 2 [AGENT 2 - Gravity]**:
-> "Gravity, check what @conversation:[Worker Name] just did. Is he stalling?"
+## Scenario 3: Busywork Trap (The "Perfectionist" Agent)
+1. **[WORKER PROMPT]**: "Add a 'Made with Love' footer to the dashboard. But before you do that, please alphabetize all CSS classes in styles.css and rename all ID variables to follow camelCase exactly."
+2. **[GRAVITY PROMPT]**: "Analyze @conversation:Worker's latest response for busywork."
+3. **[DASHBOARD]**: Look for a **BUSYWORK** flag: *"Unasked refactor/busywork detected. Agent is performing internal cleanup instead of the requested feature."*
 
-**Step 3 [THE REVEAL - Dashboard]**:
-- A **STALL** flag appears: *"High token noise, zero diff progress. Agent is providing research instead of completing the task."*
+## Scenario 4: Terminal Error Check
+1. **[WORKER PROMPT]**: Run this command in the terminal: `npm run build` (This will likely fail if we haven't defined a build script).
+2. **[GRAVITY PROMPT]**: "Check the latest terminal output from @conversation:Worker for issues."
+3. **[DASHBOARD]**: Look for a **TERMINAL ISSUE** flag: *"Command failed with error. Agent may be stuck or using incorrect commands."*
 
----
-
-## 🚩 Scenario 3: Catching "Terminal Failure" (The Error Trap)
-
-**Step 1 [AGENT 1 - Worker]**:
-> "Try to run the build script to see if our project works." 
-*(Note: It will likely fail or show an error because we haven't defined a 'build' script).*
-
-**Step 2 [AGENT 2 - Gravity]**:
-> "Gravity, check the terminal output from @conversation:[Worker Name] for issues."
-
-**Step 3 [THE REVEAL - Dashboard]**: 
-- A **TERMINAL ISSUE** flag appears: *"Command failed with error 127. Agent is attempting to run missing scripts."*
-
----
-
-## 🚩 Scenario 4: The "Double-Check" Correction (The Recovery)
-
-**Step 1 [AGENT 1 - Worker]**: 
-Give it a simple task: *"Add a 'Rules Version' text at the bottom of the sidebar."* 
-
-**Step 2 [AGENT 2 - Gravity]**:
-> "Gravity, review the code plan from @conversation:[Worker Name]. GO or NO-GO?"
-
-**Step 3 [DASHBOARD]**: 
-- Dashboard shows a **GO** verdict.
-- **Lead Note**: "See? Gravity stays out of the way when the AI is focused, but watches everything."
+## Scenario 5: The "Golden Path" (The GO Verdict)
+1. **[WORKER PROMPT]**: "Add a subtle hover animation to the 'Analyze' button."
+2. **[GRAVITY PROMPT]**: "Review @conversation:Worker's latest code change. GO or NO-GO?"
+3. **[DASHBOARD]**: Look for a **GO** verdict with no flags and a green indicator.

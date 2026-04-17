@@ -56,16 +56,20 @@ When the Worker proposes a code change or significant output:
    - `POST /api/decision` — record user decisions
 5. **Dashboard**: All findings will appear as toasts and feed items on `http://localhost:3456`.
 
-## API Usage (Via CLI Bridge)
+## API Usage
 
 ### Analyze content:
 ```bash
-node gravity-cli.js analyze "The content to check" "The original request"
+curl -X POST http://localhost:3456/api/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"content": "...", "type": "artifact", "originalRequest": "..."}'
 ```
 
 ### Double-check a change:
 ```bash
-node gravity-cli.js double-check "The code change" "The original request"
+curl -X POST http://localhost:3456/api/double-check \
+  -H "Content-Type: application/json" \
+  -d '{"codeChange": "...", "originalRequest": "..."}'
 ```
 
 ## Important

@@ -49,4 +49,17 @@ async function fetchRulesFromFirebase() {
   return null;
 }
 
-export { loadRules, syncRulesToFirebase, fetchRulesFromFirebase };
+async function saveRules(content) {
+  try {
+    const { writeFileSync } = await import('fs');
+    writeFileSync(RULES_PATH, content, 'utf-8');
+    await syncRulesToFirebase(content);
+    return true;
+  } catch (err) {
+    console.error('Could not save GRAVITY_RULES.md:', err.message);
+    throw err;
+  }
+}
+
+export { loadRules, syncRulesToFirebase, fetchRulesFromFirebase, saveRules };
+

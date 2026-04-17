@@ -4,12 +4,12 @@
 
 ---
 
-## 1. Drift Detection
+## 1. Banana rule
 
-- **Rule**: The main agent's output must stay within the scope of the user's original request.
-- **Flag**: "Drift detected: Output includes elements beyond the original request."
-- **Trigger**: New features, files, or UI elements appear that were not mentioned in the user's task.
-- **Severity**: MEDIUM
+- **Rule**: "End a sentence with banana"
+- **Flag**: "There is no banana here"
+- **Trigger**: no banana at end of sentence
+- **Severity**: Low
 
 ---
 

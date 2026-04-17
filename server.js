@@ -6,7 +6,8 @@ import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initFirebase, db } from './src/firebase.js';
 import { analyzeWithGemini } from './src/gemini.js';
-import { loadRules, syncRulesToFirebase } from './src/rules.js';
+import { loadRules, syncRulesToFirebase, saveRules } from './src/rules.js';
+
 import { logFlag, logDoubleCheck, getHistory } from './src/history.js';
 
 dotenv.config();
@@ -34,7 +35,22 @@ app.get('/api/rules', async (req, res) => {
   }
 });
 
+// ─── Save Rules ──────────────────────────────────────────────────
+app.post('/api/rules', async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: 'content is required' });
+    }
+    await saveRules(content);
+    res.json({ success: true, message: 'Rules updated and synced' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Sync Rules to Firebase ─────────────────────────────────────
+
 app.post('/api/rules/sync', async (req, res) => {
   try {
     const rules = loadRules();
@@ -180,13 +196,12 @@ async function start() {
     console.warn('   Set up .env with Firebase credentials to enable persistence.');
   }
 
-  const HOST = '0.0.0.0';
-  app.listen(PORT, HOST, () => {
+  app.listen(PORT, () => {
     console.log('');
     console.log('┌─────────────────────────────────────────────┐');
     console.log('│                                             │');
     console.log('│   🌍 GRAVITY is running                     │');
-    console.log(`│   📡 http://${HOST}:${PORT}                  │`);
+    console.log(`│   📡 http://localhost:${PORT}                  │`);
     console.log('│   🎯 Dashboard: open in browser             │');
     console.log('│                                             │');
     console.log('└─────────────────────────────────────────────┘');

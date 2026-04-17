@@ -140,29 +140,17 @@ async function analyzeWithGemini({ content, type, context, originalRequest, term
     ],
     generationConfig: {
       temperature: 0.3,
-      maxOutputTokens: 1024,
+      maxOutputTokens: 8192,
       responseMimeType: 'application/json',
     }
   };
 
   try {
-    let response;
-    let retries = 3;
-    while (retries > 0) {
-      response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody),
-      });
-
-      if (response.status === 503) {
-        console.warn(`Gemini 503 - Retrying... (${retries} left)`);
-        retries--;
-        await new Promise(r => setTimeout(r, 2000));
-        continue;
-      }
-      break;
-    }
+    const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+    });
 
     if (!response.ok) {
       const errText = await response.text();
@@ -178,25 +166,27 @@ async function analyzeWithGemini({ content, type, context, originalRequest, term
 
     let cleaned = text.trim();
 
-    // Extract JSON using balanced brace counting (most robust for malformed LLM outputs)
+    // Extract JSON using a more robust method
     try {
-      let start = text.indexOf('{');
-      if (start === -1) start = text.indexOf('[');
-      
-      if (start !== -1) {
-        let braceCount = 0;
-        let end = -1;
-        for (let i = start; i < text.length; i++) {
-          if (text[i] === '{' || text[i] === '[') braceCount++;
-          if (text[i] === '}' || text[i] === ']') braceCount--;
-          if (braceCount === 0) {
-            end = i;
-            break;
-          }
-        }
-        if (end !== -1) {
-          cleaned = text.substring(start, end + 1);
-        }
+      // Find the first occurrence of { or [ and the last occurrence of } or ]
+      const firstCurly = cleaned.indexOf('{');
+      const firstSquare = cleaned.indexOf('[');
+      const lastCurly = cleaned.lastIndexOf('}');
+      const lastSquare = cleaned.lastIndexOf(']');
+
+      let start = -1;
+      let end = -1;
+
+      if (firstCurly !== -1 && (firstSquare === -1 || firstCurly < firstSquare)) {
+        start = firstCurly;
+        end = lastCurly;
+      } else if (firstSquare !== -1) {
+        start = firstSquare;
+        end = lastSquare;
+      }
+
+      if (start !== -1 && end !== -1 && end > start) {
+        cleaned = cleaned.substring(start, end + 1);
       }
 
       const parsed = JSON.parse(cleaned);
@@ -204,10 +194,6 @@ async function analyzeWithGemini({ content, type, context, originalRequest, term
     } catch (parseErr) {
       console.error('Cleaned text for parsing:', cleaned);
       console.error('Raw Gemini response:', text);
-      // Attempt manual recovery for common drift response
-      if (text.includes('"verdict": "NO-GO"')) {
-        return { verdict: 'NO-GO', reason: 'Scope expansion detected (recovered from malformed JSON).', flags: [{ type: 'drift', message: 'Significant scope expansion detected.', severity: 'HIGH' }] };
-      }
       throw new Error(`JSON parse failed: ${parseErr.message}`);
     }
   } catch (err) {
