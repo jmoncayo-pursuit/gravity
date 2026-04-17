@@ -180,12 +180,13 @@ async function start() {
     console.warn('   Set up .env with Firebase credentials to enable persistence.');
   }
 
-  app.listen(PORT, () => {
+  const HOST = '0.0.0.0';
+  app.listen(PORT, HOST, () => {
     console.log('');
     console.log('┌─────────────────────────────────────────────┐');
     console.log('│                                             │');
     console.log('│   🌍 GRAVITY is running                     │');
-    console.log(`│   📡 http://localhost:${PORT}                  │`);
+    console.log(`│   📡 http://${HOST}:${PORT}                  │`);
     console.log('│   🎯 Dashboard: open in browser             │');
     console.log('│                                             │');
     console.log('└─────────────────────────────────────────────┘');
