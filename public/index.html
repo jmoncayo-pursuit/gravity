@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Gravity — Keeps your AI sessions grounded so you stay productive and sane.">
+  <title>Gravity — AI Session Monitor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- ─── Background Effects ─── -->
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <!-- ─── Header ─── -->
+    <header id="header">
+      <div class="header-left">
+        <div class="logo">
+          <div class="logo-icon">
+            <svg viewBox="0 0 32 32" fill="none">
+              <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="1.5" opacity="0.3"/>
+              <circle cx="16" cy="16" r="8" stroke="currentColor" stroke-width="1.5"/>
+              <circle cx="16" cy="16" r="3" fill="currentColor"/>
+              <line x1="16" y1="2" x2="16" y2="6" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="16" y1="26" x2="16" y2="30" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="2" y1="16" x2="6" y2="16" stroke="currentColor" stroke-width="1.5"/>
+              <line x1="26" y1="16" x2="30" y2="16" stroke="currentColor" stroke-width="1.5"/>
+            </svg>
+          </div>
+          <h1>GRAVITY</h1>
+        </div>
+        <span class="tagline">Keeps your AI grounded</span>
+      </div>
+      <div class="header-right">
+        <div class="status-indicator" id="statusIndicator">
+          <div class="status-dot"></div>
+          <span>Monitoring</span>
+        </div>
+        <div class="header-stats">
+          <div class="stat-chip" id="flagCountChip">
+            <span class="stat-num" id="flagCount">0</span>
+            <span class="stat-label">flags</span>
+          </div>
+          <div class="stat-chip" id="checkCountChip">
+            <span class="stat-num" id="checkCount">0</span>
+            <span class="stat-label">checks</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- ─── Main Content ─── -->
+    <main id="main">
+      <!-- ─── Control Sidebar ─── -->
+      <aside class="sidebar-panel" id="sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-title">CONTROL CENTER</div>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>SYSTEM STATUS</h3>
+          <ul class="status-list">
+            <li class="status-item">
+              <div class="status-indicator online" id="healthApi"></div>
+              <div class="status-info">
+                <span class="status-label">API Gateway</span>
+                <span class="status-val">Operational</span>
+              </div>
+            </li>
+            <li class="status-item">
+              <div class="status-indicator online" id="healthFirebase"></div>
+              <div class="status-info">
+                <span class="status-label">Cloud Bridge</span>
+                <span class="status-val">Connected</span>
+              </div>
+            </li>
+            <li class="status-item">
+              <div class="status-indicator standby" id="healthDb"></div>
+              <div class="status-info">
+                <span class="status-label">Gravity Vault</span>
+                <span class="status-val">Ready</span>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="sidebar-section">
+          <h3>SESSION ANALYTICS</h3>
+          <div class="analytics-grid">
+            <div class="stat-box">
+              <span class="stat-label">UPTIME</span>
+              <span class="stat-val" id="healthUptime">00:00:00</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">FLAGS</span>
+              <span class="stat-val" id="statFlags">0</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ─── Left Panel: Analysis Input ─── -->
+      <section class="panel panel-input" id="panelInput">
+        <div class="panel-header">
+          <h2>
+            <svg viewBox="0 0 20 20" fill="currentColor" class="panel-icon">
+              <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+              <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+            </svg>
+            Analyze
+          </h2>
+          <div class="panel-tabs">
+            <button class="tab active" data-type="artifact" id="tabArtifact">Artifact</button>
+            <button class="tab" data-type="terminal" id="tabTerminal">Terminal</button>
+            <button class="tab" data-type="code_change" id="tabCode">Code</button>
+          </div>
+        </div>
+
+        <div class="panel-body">
+          <div class="input-group">
+            <label for="originalRequest">Original Request</label>
+            <textarea id="originalRequest" placeholder="What did you ask the agent to do?" rows="2"></textarea>
+          </div>
+
+          <div class="input-group">
+            <label for="contentInput">Content to Analyze</label>
+            <textarea id="contentInput" placeholder="Paste the agent's output, artifact content, or terminal output..." rows="8"></textarea>
+          </div>
+
+          <div class="input-group">
+            <label for="contextInput">Additional Context <span class="optional">(optional)</span></label>
+            <textarea id="contextInput" placeholder="Any extra context for Gravity..." rows="2"></textarea>
+          </div>
+
+          <div class="action-row">
+            <button class="btn btn-primary" id="btnAnalyze">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+                <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+              </svg>
+              Analyze
+            </button>
+            <button class="btn btn-accent" id="btnDoubleCheck">
+              <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+              </svg>
+              Double-Check
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ─── Right Panel: Results ─── -->
+      <section class="panel panel-results" id="panelResults">
+        <div class="panel-header">
+          <h2>
+            <svg viewBox="0 0 20 20" fill="currentColor" class="panel-icon">
+              <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/>
+            </svg>
+            Gravity Says
+          </h2>
+        </div>
+
+        <div class="panel-body results-body" id="resultsBody">
+          <!-- Empty state -->
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">
+              <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+                <circle cx="24" cy="24" r="20" opacity="0.2"/>
+                <circle cx="24" cy="24" r="10" opacity="0.4"/>
+                <circle cx="24" cy="24" r="3"/>
+              </svg>
+            </div>
+            <p class="empty-title">Standing by</p>
+            <p class="empty-desc">Paste content and click <strong>Analyze</strong> or <strong>Double-Check</strong> to get Gravity's assessment.</p>
+          </div>
+
+          <!-- Verdict card (hidden until double-check) -->
+          <div class="verdict-card hidden" id="verdictCard">
+            <div class="verdict-badge" id="verdictBadge">GO</div>
+            <p class="verdict-reason" id="verdictReason"></p>
+            <p class="verdict-suggestion hidden" id="verdictSuggestion"></p>
+            <div class="verdict-actions" id="verdictActions">
+              <button class="btn btn-sm btn-go" id="btnAccept">Accept</button>
+              <button class="btn btn-sm btn-nogo" id="btnReject">Reject</button>
+              <button class="btn btn-sm btn-neutral" id="btnCorrect">Ask for Fix</button>
+            </div>
+          </div>
+
+          <!-- Flags list -->
+          <div class="flags-list" id="flagsList"></div>
+
+          <!-- Summary -->
+          <div class="summary-card hidden" id="summaryCard">
+            <p id="summaryText"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ─── Bottom Panel: Live Feed ─── -->
+    <section class="panel panel-feed" id="panelFeed">
+      <div class="panel-header">
+        <h2>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="panel-icon">
+            <path d="M2 5a2 2 0 012-2h7a2 2 0 012 2v4a2 2 0 01-2 2H9l-3 3v-3H4a2 2 0 01-2-2V5z"/>
+            <path d="M15 7v2a4 4 0 01-4 4H9.828l-1.766 1.767c.28.149.599.233.938.233h2l3 3v-3h2a2 2 0 002-2V9a2 2 0 00-2-2h-1z"/>
+          </svg>
+          Live Feed
+        </h2>
+        <button class="btn btn-sm btn-ghost" id="btnClearFeed">Clear</button>
+      </div>
+      <div class="feed-scroll" id="feedScroll">
+        <div class="feed-empty" id="feedEmpty">
+          <span>No flags yet. Gravity is watching.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─── Toast Container ─── -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- ─── Loading Overlay ─── -->
+    <div class="loader-overlay hidden" id="loaderOverlay">
+      <div class="loader-ring">
+        <div class="loader-orbit"></div>
+      </div>
+      <p class="loader-text">Gravity is analyzing...</p>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
