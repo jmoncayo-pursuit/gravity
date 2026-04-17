@@ -44,7 +44,10 @@ const els = {
   healthFirebase: $('#healthFirebase'),
   healthDb: $('#healthDb'),
   healthUptime: $('#healthUptime'),
+  statFlags: $('#statFlags'),
 };
+
+let flagCount = 0;
 
 // ─── Tab Switching ───────────────────────────────────────────
 $$('.tab').forEach(tab => {
@@ -272,6 +275,12 @@ function showToast(message, severity = 'MEDIUM') {
   });
 
   els.toastContainer.appendChild(toast);
+
+  // Update flag counter if it's a flag (not a clean summary or GO verdict)
+  if (severity && severity !== 'GO' && severity !== 'Clean') {
+    flagCount++;
+    if (els.statFlags) els.statFlags.textContent = flagCount;
+  }
 
   // Auto-dismiss
   setTimeout(() => {
