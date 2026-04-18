@@ -1,5 +1,5 @@
-# GRAVITY_RULES.md
-# Rules for the Gravity Monitor Agent
+# ⚖️ GRAVITY RULES (v2.0.0-sovereign)
+# Multi-Agent Sovereign Shield Active
 # Keeps your AI sessions grounded so you stay productive and sane.
 
 ---
