@@ -8,73 +8,77 @@ const WATCH_DIR = process.cwd();
 const API_URL = 'http://localhost:3456/api/analyze';
 const IGNORE_PATHS = [/node_modules/, /\.git/, /public/];
 
-console.log('📡 GRAVITY AUDITOR 2.0: Deep Surveillance Active.');
+console.log('📡 GRAVITY AUDITOR 3.0: Deep Surveillance & Claims Verification Active.');
 
-const getTerminalContext = () => {
+/**
+ * Get context from terminal and filesystem to verify claims.
+ */
+const getGroundingContext = () => {
+    let terminal = "";
     try {
-        // Grab last 10 lines of shell history to detect failed commands or loops
-        return execSync('tail -n 10 ~/.zsh_history | cut -d";" -f2-').toString();
-    } catch (e) {
-        return "Terminal context unavailable.";
-    }
-};
+        terminal = execSync('tail -n 10 ~/.zsh_history | cut -d";" -f2-').toString();
+    } catch (e) { terminal = "Terminal unavailable."; }
 
-const getRecentFlags = async () => {
-    return new Promise((resolve) => {
-        http.get('http://localhost:3456/api/history?limit=5', (res) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    resolve(json.history || []);
-                } catch { resolve([]); }
-            });
-        }).on('error', () => resolve([]));
-    });
+    const claims = fs.existsSync('AGENT_CLAIMS.md') ? fs.readFileSync('AGENT_CLAIMS.md', 'utf-8') : 'No claims ledger.';
+    const status = execSync('git status --short', { encoding: 'utf-8' });
+    
+    return `
+TERMINAL RECENT:
+${terminal}
+
+WORKER CLAIMS:
+${claims}
+
+GIT STATUS:
+${status}
+    `.trim();
 };
 
 const analyzeChange = async (filePath) => {
-    console.log(`🔍 Auditing change in: ${path.basename(filePath)}...`);
+    const filename = path.basename(filePath);
+    console.log(`🔍 Auditing activity in: ${filename}...`);
     
-    // Truncate to 1500 chars to save TPM
-    const content = fs.readFileSync(filePath, 'utf8').substring(0, 1500);
-    const terminal = getTerminalContext();
-    const history = await getRecentFlags();
+    const content = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8').substring(0, 2000) : 'File deleted.';
+    const context = getGroundingContext();
 
     const payload = JSON.stringify({
         content: content,
         type: 'autonomous_audit',
-        context: `File: ${path.basename(filePath)}`,
-        terminalOutput: terminal,
-        history: history.slice(0, 3) // Only last 3 flags
+        context: context,
+        originalRequest: 'Verify Worker Claims vs Filesystem Reality (Rule #12).'
     });
 
-    const req = http.request(API_URL, {
+    const options = {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(payload)
         }
-    }, (res) => {
+    };
+
+    const req = http.request(API_URL, options, (res) => {
         let responseData = '';
         res.on('data', chunk => responseData += chunk);
         res.on('end', () => {
-            const data = JSON.parse(responseData);
-            if (data.flags && data.flags.length > 0) {
-                console.log(`⚠️ FLAGS RAISED: ${data.flags.length}`);
-            } else {
-                console.log('✅ Grounding Verified.');
+            try {
+                const data = JSON.parse(responseData);
+                if (data.flags && data.flags.length > 0) {
+                    console.log(`⚠️  FLAGS RAISED: ${data.flags.length} for ${filename}`);
+                } else {
+                    console.log(`✅ ${filename} Grounded.`);
+                }
+            } catch (e) {
+                console.log('❌ Audit relay failure.');
             }
         });
     });
 
-    req.on('error', (e) => console.error('Auditor Error:', e.message));
+    req.on('error', (e) => console.error('Auditor Connection Error:', e.message));
     req.write(payload);
     req.end();
 };
 
-// Debounce to prevent API flooding during high-speed coding
+// Debounce to prevent flooding
 let timeout;
 const watcher = chokidar.watch(WATCH_DIR, { 
     ignored: IGNORE_PATHS,

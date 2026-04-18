@@ -239,6 +239,48 @@ function updateHealthUI(type, ok, text) {
     el.classList.toggle('offline', !ok);
 }
 
+// ─── Sovereign Oversight ──────────────────────────────────────
+const btnForceAudit = document.getElementById('btnForceAudit');
+
+if (btnForceAudit) {
+  btnForceAudit.addEventListener('click', async () => {
+    if (!confirm('This will trigger a system-wide deep audit of all worker claims. Proceed?')) return;
+    
+    try {
+      const res = await fetch('/api/audit', { method: 'POST' });
+      if (res.ok) {
+        showToast('Deep Audit Triggered', 'warning');
+        // Pulse the sidebar to show priority
+        document.getElementById('sidebar').classList.add('emergency-pulse');
+        setTimeout(() => document.getElementById('sidebar').classList.remove('emergency-pulse'), 5000);
+      }
+    } catch (err) {
+      showToast('Audit Trigger Failed', 'error');
+    }
+  });
+}
+
+// Periodic claims check
+async function updateClaimsStatus() {
+  try {
+    const res = await fetch('/api/claims');
+    const data = await res.json();
+    const statusVal = document.querySelector('#ledgerStatus');
+    if (statusVal) {
+      if (data.claims && data.claims.length > 50) {
+        statusVal.textContent = 'Active (Verifying)';
+        statusVal.className = 'value online';
+      } else {
+        statusVal.textContent = 'Idle';
+        statusVal.className = 'value standby';
+      }
+    }
+  } catch (e) {}
+}
+
+setInterval(updateClaimsStatus, 10000);
+updateClaimsStatus();
+
 // ─── Init ────────────────────────────────────────────────────
 initRealtime();
 updateRulesVersion();

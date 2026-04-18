@@ -185,6 +185,43 @@ app.get('/api/history', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/claims
+ * Returns the content of AGENT_CLAIMS.md for the oversight panel.
+ */
+app.get('/api/claims', (req, res) => {
+  try {
+    if (existsSync(join(process.cwd(), 'AGENT_CLAIMS.md'))) {
+      const claims = readFileSync(join(process.cwd(), 'AGENT_CLAIMS.md'), 'utf-8');
+      res.json({ claims });
+    } else {
+      res.json({ claims: 'No active ledger found.' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to read claims ledger' });
+  }
+});
+
+/**
+ * POST /api/audit
+ * Triggers a manual system-wide audit.
+ */
+app.post('/api/audit', async (req, res) => {
+  try {
+    const auditFlag = {
+      type: 'manual_audit',
+      message: 'USER-TRIGGERED DEEP AUDIT INITIATED',
+      severity: 'HIGH',
+      why: ['User requested manual verification of Worker claims.', 'Activating Deep Investigation protocol.'],
+      timestamp: new Date().toISOString(),
+    };
+    await logFlag(auditFlag);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to trigger audit' });
+  }
+});
+
 // ─── Start Server ────────────────────────────────────────────────
 async function start() {
   try {
