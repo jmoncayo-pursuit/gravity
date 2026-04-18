@@ -12,27 +12,38 @@ Gravity is an intelligent, iterative multi-agent system built with Gemini and Go
 - **Quick Authority Voice**: Short, direct statements — no fluff
 - **Iterative Learning**: Flags and decisions stored in Firebase, gets smarter over sessions
 
-## 🏗️ Architecture
+## 🏗️ Multi-Agent Architecture
 
+Gravity employs a **Sovereign Dual-Agent** defense model to ensure zero-trust grounding.
+
+```mermaid
+graph TD
+    subgraph "Antigravity Environment"
+        Worker[Worker Agent]
+    end
+
+    subgraph "Gravity Defense System"
+        Auditor[General Auditor Agent]
+        Security[Security Specialist Agent]
+        Blackboard[(Firestore Blackboard)]
+        Dashboard[Live Dashboard]
+    end
+
+    Worker -.->|Output Observed| Auditor
+    Worker -.->|Output Observed| Security
+    
+    Auditor -->|Async Flag| Blackboard
+    Security -->|Async Flag| Blackboard
+    
+    Blackboard -->|Reactive Stream| Dashboard
+    
+    style Security fill:#f96,stroke:#333,stroke-width:2px
+    style Auditor fill:#bbf,stroke:#333,stroke-width:2px
 ```
-┌─────────────────────────────────────────┐
-│         Antigravity Agent Manager       │
-│  ┌──────────┐    ┌───────────────────┐  │
-│  │  Worker   │    │     Gravity       │  │
-│  │  Agent    │◄──►│  (Monitor Agent)  │  │
-│  └──────────┘    └───────┬───────────┘  │
-│                          │              │
-│                  ┌───────▼───────┐      │
-│                  │ Gravity API   │      │
-│                  │ (Express)     │      │
-│                  └───────┬───────┘      │
-│                          │              │
-│                  ┌───────▼───────┐      │
-│                  │   Firebase    │      │
-│                  │  (Firestore)  │      │
-│                  └───────────────┘      │
-└─────────────────────────────────────────┘
-```
+
+### 🤖 The Agents
+1. **General Auditor (`gravity-watch.js`)**: Monitors for rule violations, drift, and state grounding. Enforces Rules #1-#13.
+2. **Security Specialist (`gravity-security.js`)**: A ruthlessly specialized agent focused exclusively on **Rule #4 (Security/Keys)** and **Rule #14 (Directory Fidelity)**. Runs as an independent process for fail-safe redundancy.
 
 ## 🚀 Quick Start
 

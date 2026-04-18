@@ -2,10 +2,20 @@
    GRAVITY — Dashboard Client Logic
    ============================================================ */
 
-const API = window.location.origin;  // Same origin
+import { 
+    getFirestore, collection, query, orderBy, limit, onSnapshot 
+} from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+
+const firebaseConfig = { projectId: "gravity-493615" };
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+
+const API = '';  // Same origin
 
 // ─── State ───────────────────────────────────────────────────
 let currentType = 'artifact';
+let currentHistory = [];
 let flagCount = 0;
 let checkCount = 0;
 
@@ -39,24 +49,61 @@ const els = {
   btnReject: $('#btnReject'),
   btnCorrect: $('#btnCorrect'),
   btnClearFeed: $('#btnClearFeed'),
-  // Health markers
   healthApi: $('#healthApi'),
   healthFirebase: $('#healthFirebase'),
   healthDb: $('#healthDb'),
   healthUptime: $('#healthUptime'),
   statFlags: $('#statFlags'),
-  // Rules Editor
-  btnShowRules: $('#btnShowRules'),
-  btnHideRules: $('#btnHideRules'),
-  btnSaveRules: $('#btnSaveRules'),
-  panelRules: $('#panelRules'),
-  panelInput: $('#panelInput'),
-  panelResults: $('#panelResults'),
-  rulesEditor: $('#rulesEditor'),
-  rulesStatus: $('#rulesStatus'),
+  rulesLastModified: $('#rulesLastModified')
 };
 
+// ─── Real-time ───
+function initRealtime() {
+    const q = query(collection(db, "gravity-history"), orderBy("timestamp", "desc"), limit(50));
+    onSnapshot(q, (snapshot) => {
+        const history = [];
+        snapshot.forEach((doc) => history.push({ id: doc.id, ...doc.data() }));
+        currentHistory = history;
+        renderFeed();
+        updateGlobalStats(history);
+    });
+}
 
+function updateGlobalStats(history) {
+    const flags = history.filter(h => h.entryType === 'flag');
+    if (els.statFlags) els.statFlags.innerText = flags.length;
+    if (els.flagCount) els.flagCount.innerText = flags.length;
+    
+    const isEmergency = history.some(e => (e.severity === 'CRITICAL' || e.type === 'fidelity_breach') && (Date.now() - new Date(e.timestamp).getTime()) < 600000);
+    document.body.classList.toggle('emergency-active', isEmergency);
+}
+
+function renderFeed() {
+    if (!els.feedScroll) return;
+    
+    if (currentHistory.length === 0) {
+        els.feedScroll.innerHTML = `<div class="feed-empty"><span>No flags yet. Gravity is watching.</span></div>`;
+        return;
+    }
+
+    const html = currentHistory.map(item => {
+        const time = new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const type = item.type || (item.entryType === 'flag' ? 'protocol_breach' : 'verification');
+        const severity = item.severity || 'LOW';
+        
+        return `
+            <div class="feed-item ${severity}">
+                <div class="feed-item-header">
+                    <span class="flag-type">${type.toUpperCase()}</span>
+                    <span class="flag-time">${time}</span>
+                </div>
+                <div class="feed-text">${item.message || 'System verification audit pulse.'}</div>
+            </div>
+        `;
+    }).join('');
+    
+    els.feedScroll.innerHTML = html;
+}
 
 // ─── Tab Switching ───────────────────────────────────────────
 $$('.tab').forEach(tab => {
@@ -64,8 +111,6 @@ $$('.tab').forEach(tab => {
     $$('.tab').forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     currentType = tab.dataset.type;
-
-    // Update placeholder
     const placeholders = {
       artifact: "Paste the agent's output, artifact content, or plan...",
       terminal: "Paste terminal output to check for errors or stalls...",
@@ -75,446 +120,128 @@ $$('.tab').forEach(tab => {
   });
 });
 
-// ─── Analyze ─────────────────────────────────────────────────
-els.btnAnalyze.addEventListener('click', async () => {
-  const content = els.contentInput.value.trim();
-  if (!content) {
-    showToast('Paste something to analyze first.', 'LOW');
-    return;
-  }
+// ─── Analyze & Double-Check ──────────────────────────────────
+els.btnAnalyze.addEventListener('click', () => submitRequest('analyze'));
+els.btnDoubleCheck.addEventListener('click', () => submitRequest('double-check'));
 
-  showLoader(true);
-  clearResults();
-
-  try {
-    const res = await fetch(`${API}/api/analyze`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        content,
-        type: currentType,
-        context: els.contextInput.value.trim(),
-        originalRequest: els.originalRequest.value.trim(),
-      }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-
-    displayAnalysis(data);
-  } catch (err) {
-    showToast(`Analysis failed: ${err.message}`, 'HIGH');
-  } finally {
-    showLoader(false);
-  }
-});
-
-// ─── Double-Check ────────────────────────────────────────────
-els.btnDoubleCheck.addEventListener('click', async () => {
-  const content = els.contentInput.value.trim();
-  if (!content) {
-    showToast('Paste the proposed change to double-check.', 'LOW');
-    return;
-  }
-
-  showLoader(true);
-  clearResults();
-
-  try {
-    const res = await fetch(`${API}/api/double-check`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        codeChange: content,
-        originalRequest: els.originalRequest.value.trim(),
-        context: els.contextInput.value.trim(),
-        terminalOutput: '',
-      }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-
-    displayDoubleCheck(data);
-  } catch (err) {
-    showToast(`Double-check failed: ${err.message}`, 'HIGH');
-  } finally {
-    showLoader(false);
-  }
-});
-
-// ─── Display Analysis Results ────────────────────────────────
-function displayAnalysis(data) {
-  els.resultsBody.innerHTML = ''; // Keep fresh results only
-  els.emptyState.classList.add('hidden');
-
-  // Show flags
-  if (data.flags && data.flags.length > 0) {
-    data.flags.forEach(flag => {
-      addFlagCard(flag);
-      addFeedItem(flag.message, flag.severity);
-      showToast(flag.message, flag.severity);
-      flagCount++;
-    });
-    els.flagCount.textContent = flagCount;
-  }
-
-  // Show summary
-  if (data.summary) {
-    els.summaryCard.classList.remove('hidden');
-    els.summaryText.textContent = data.summary;
-  }
-
-  if (!data.flags || data.flags.length === 0) {
-    els.summaryCard.classList.remove('hidden');
-    els.summaryText.textContent = data.summary || '✓ Clean. No issues detected.';
-  }
-}
-
-// ─── Display Double-Check Result ─────────────────────────────
-function displayDoubleCheck(data) {
-  els.emptyState.classList.add('hidden');
-  checkCount++;
-  els.checkCount.textContent = checkCount;
-
-  const isGo = data.verdict === 'GO';
-
-  // Show verdict card
-  els.verdictCard.classList.remove('hidden', 'go', 'nogo');
-  els.verdictCard.classList.add(isGo ? 'go' : 'nogo');
-  els.verdictBadge.textContent = data.verdict || 'GO';
-  els.verdictReason.textContent = data.reason || '';
-
-  if (data.suggestion) {
-    els.verdictSuggestion.textContent = data.suggestion;
-    els.verdictSuggestion.classList.remove('hidden');
-  } else {
-    els.verdictSuggestion.classList.add('hidden');
-  }
-
-  els.verdictActions.classList.remove('hidden');
-
-  // Show flags
-  if (data.flags && data.flags.length > 0) {
-    data.flags.forEach(flag => {
-      addFlagCard(flag);
-      addFeedItem(flag.message, flag.severity);
-      showToast(flag.message, flag.severity);
-      flagCount++;
-    });
-    els.flagCount.textContent = flagCount;
-  }
-
-  // Feed item for verdict
-  addFeedItem(
-    `Double-check: ${data.verdict} — ${data.reason}`,
-    data.verdict === 'GO' ? 'GO' : 'NOGO'
-  );
-
-  showToast(
-    `${data.verdict}: ${data.reason}`,
-    data.verdict === 'GO' ? 'GO' : 'HIGH'
-  );
-}
-
-// ─── Flag Card ───────────────────────────────────────────────
-function addFlagCard(flag) {
-  const card = document.createElement('div');
-  card.className = `flag-card severity-${flag.severity || 'MEDIUM'}`;
-
-  const whyItems = (flag.why || []).map(w => `<li>${escapeHtml(w)}</li>`).join('');
-
-  card.innerHTML = `
-    <div class="flag-header">
-      <span class="flag-type">${escapeHtml(flag.type || 'unknown')}</span>
-      <span class="flag-severity">${flag.severity || 'MEDIUM'}</span>
-    </div>
-    <div class="flag-message">${escapeHtml(flag.message || '')}</div>
-    ${whyItems ? `
-      <div class="flag-why" id="why-${Date.now()}">
-        <ul>${whyItems}</ul>
-      </div>
-      <div class="flag-expand-hint">Click for details</div>
-    ` : ''}
-  `;
-
-  // Toggle "Why?" expansion
-  card.addEventListener('click', () => {
-    const why = card.querySelector('.flag-why');
-    const hint = card.querySelector('.flag-expand-hint');
-    if (why) {
-      why.classList.toggle('expanded');
-      if (hint) hint.textContent = why.classList.contains('expanded') ? 'Click to collapse' : 'Click for details';
+async function submitRequest(mode) {
+    const content = els.contentInput.value.trim();
+    if (!content) {
+        showToast('Paste something to analyze first.', 'LOW');
+        return;
     }
-  });
 
-  els.flagsList.appendChild(card);
-}
-
-// ─── Feed Items ──────────────────────────────────────────────
-function addFeedItem(message, severity) {
-  els.feedEmpty.classList.add('hidden');
-
-  const item = document.createElement('div');
-  item.className = 'feed-item';
-  const time = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
-  item.innerHTML = `
-    <div class="feed-dot ${severity}"></div>
-    <span class="feed-text">${escapeHtml(message)}</span>
-    <span class="feed-time">${time}</span>
-  `;
-
-  els.feedScroll.insertBefore(item, els.feedScroll.firstChild);
-}
-
-// ─── Toasts ──────────────────────────────────────────────────
-function showToast(message, severity = 'MEDIUM') {
-  const toast = document.createElement('div');
-  toast.className = `toast severity-${severity}`;
-
-  toast.innerHTML = `
-    <div class="toast-dot"></div>
-    <span class="toast-text">${escapeHtml(message)}</span>
-    <button class="toast-close" aria-label="Close toast">&times;</button>
-  `;
-
-  toast.querySelector('.toast-close').addEventListener('click', () => {
-    toast.classList.add('toast-out');
-    setTimeout(() => toast.remove(), 300);
-  });
-
-  els.toastContainer.appendChild(toast);
-
-  // Update flag counter if it's a flag (not a clean summary or GO verdict)
-  if (severity && severity !== 'GO' && severity !== 'Clean') {
-    flagCount++;
-    if (els.statFlags) els.statFlags.textContent = flagCount;
-  }
-
-  // Auto-dismiss
-  setTimeout(() => {
-    if (toast.parentNode) {
-      toast.classList.add('toast-out');
-      setTimeout(() => toast.remove(), 300);
-    }
-  }, 5000);
-}
-
-// ─── User Decision Buttons ───────────────────────────────────
-els.btnAccept.addEventListener('click', () => recordDecision('accept'));
-els.btnReject.addEventListener('click', () => recordDecision('reject'));
-els.btnCorrect.addEventListener('click', () => recordDecision('correct'));
-
-async function recordDecision(decision) {
-  let correctionNotes = '';
-  
-  if (decision === 'correct') {
-    correctionNotes = prompt('What should Gravity focus on for the correction? (Optional)');
-    if (correctionNotes === null) return; // Cancelled
-    
     showLoader(true);
-    try {
-      const res = await fetch(`${API}/api/correct`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          content: els.contentInput.value.trim(),
-          correctionNotes,
-          originalRequest: els.originalRequest.value.trim(),
-        }),
-      });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      if (data.correctedContent) {
-        els.contentInput.value = data.correctedContent;
-        showToast('Gravity has updated the content with a corrected version.', 'GO');
-        addFeedItem(`Correction generated: ${data.changesMade || 'Fixed rules violations'}`, 'GO');
-      }
-    } catch (err) {
-      showToast(`Correction failed: ${err.message}`, 'HIGH');
-    } finally {
-      showLoader(false);
-    }
-  }
+    clearResults();
 
-  try {
-    await fetch(`${API}/api/decision`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ decision, correctionNotes }),
-    });
-
-    const labels = { accept: 'Accepted', reject: 'Rejected', correct: 'Fix requested' };
-    addFeedItem(`Decision: ${labels[decision]}`, decision === 'accept' ? 'GO' : 'NOGO');
-    showToast(`Decision recorded: ${labels[decision]}`, decision === 'accept' ? 'GO' : 'MEDIUM');
-
-    if (decision !== 'correct') {
-      els.verdictActions.classList.add('hidden');
-    }
-  } catch (err) {
-    showToast(`Failed to record decision: ${err.message}`, 'HIGH');
-  }
-}
-
-// ─── Rules Editor Logic ──────────────────────────────────────
-els.btnShowRules.addEventListener('click', async () => {
-  els.panelInput.classList.add('hidden');
-  els.panelResults.classList.add('hidden');
-  els.panelRules.classList.remove('hidden');
-  
-  // Load current rules
-  try {
-    const res = await fetch(`${API}/api/rules`);
-    const data = await res.json();
-    if (res.ok) {
-      els.rulesEditor.value = data.rules;
-      updateRulesStatus('Synchronized', 'var(--go)');
-    } else {
-      throw new Error(data.error);
-    }
-  } catch (err) {
-    showToast(`Failed to load rules: ${err.message}`, 'HIGH');
-  }
-});
-
-els.btnHideRules.addEventListener('click', () => {
-  els.panelInput.classList.remove('hidden');
-  els.panelResults.classList.remove('hidden');
-  els.panelRules.classList.add('hidden');
-});
-
-els.btnSaveRules.addEventListener('click', async () => {
-  const content = els.rulesEditor.value.trim();
-  if (!content) {
-    showToast('Rules cannot be empty.', 'MEDIUM');
-    return;
-  }
-
-  showLoader(true);
-  updateRulesStatus('Saving...', 'var(--warn)');
-
-  try {
-    const res = await fetch(`${API}/api/rules`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content }),
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error);
-
-    showToast('Rules updated and deployed to Cloud Bridge.', 'GO');
-    addFeedItem('System Rules updated by user.', 'GO');
-    updateRulesStatus('Synchronized', 'var(--go)');
+    const endpoint = mode === 'analyze' ? '/api/analyze' : '/api/double-check';
     
-    // Briefly show success state in button
-    const originalText = els.btnSaveRules.textContent;
-    els.btnSaveRules.textContent = 'Saved!';
-    setTimeout(() => {
-      els.btnSaveRules.textContent = originalText;
-    }, 2000);
+    try {
+        const res = await fetch(`${API}${endpoint}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                content,
+                type: currentType,
+                context: els.contextInput.value.trim(),
+                originalRequest: els.originalRequest.value.trim(),
+            }),
+        });
 
-  } catch (err) {
-    showToast(`Failed to save rules: ${err.message}`, 'HIGH');
-    updateRulesStatus('Error Saving', 'var(--nogo)');
-  } finally {
-    showLoader(false);
-  }
-});
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error);
 
-els.rulesEditor.addEventListener('input', () => {
-  updateRulesStatus('Unsaved Changes', 'var(--warn)');
-});
-
-function updateRulesStatus(text, color) {
-  if (!els.rulesStatus) return;
-  els.rulesStatus.textContent = text;
-  els.rulesStatus.style.color = color;
+        displayResults(data, mode);
+    } catch (err) {
+        showToast(`Request failed: ${err.message}`, 'HIGH');
+    } finally {
+        showLoader(false);
+    }
 }
 
-// ─── Clear Feed ──────────────────────────────────────────────
+function displayResults(data, mode) {
+    els.emptyState.classList.add('hidden');
+    
+    if (mode === 'double-check' || data.verdict) {
+        els.verdictCard.classList.remove('hidden');
+        els.verdictBadge.innerText = data.verdict || 'GO';
+        els.verdictBadge.className = `verdict-badge ${(data.verdict || 'GO').toLowerCase()}`;
+        els.verdictReason.innerText = data.reason || 'No major risks detected by grounding engine.';
+    }
 
-els.btnClearFeed.addEventListener('click', () => {
-  els.feedScroll.innerHTML = `
-    <div class="feed-empty" id="feedEmpty">
-      <span>No flags yet. Gravity is watching.</span>
-    </div>
-  `;
-});
+    if (data.flags && data.flags.length > 0) {
+        els.flagsList.innerHTML = data.flags.map(f => `
+            <div class="flag-card severity-${f.severity}">
+                <div class="flag-header">
+                    <span class="flag-type">${f.type}</span>
+                    <span class="flag-severity">${f.severity}</span>
+                </div>
+                <div class="flag-message">${f.message}</div>
+            </div>
+        `).join('');
+    } else if (mode === 'analyze') {
+        els.flagsList.innerHTML = '<div class="feed-empty">No flags detected in this snippet.</div>';
+    }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────
 function clearResults() {
-  els.emptyState.classList.remove('hidden');
-  els.verdictCard.classList.add('hidden');
-  els.summaryCard.classList.add('hidden');
-  els.flagsList.innerHTML = '';
+    els.emptyState.classList.remove('hidden');
+    els.verdictCard.classList.add('hidden');
+    els.summaryCard.classList.add('hidden');
+    els.flagsList.innerHTML = '';
 }
 
 function showLoader(show) {
-  els.loaderOverlay.classList.toggle('hidden', !show);
+    els.loaderOverlay.classList.toggle('hidden', !show);
 }
 
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+function showToast(msg, severity) {
+    const toast = document.createElement('div');
+    toast.className = `toast severity-${severity}`;
+    toast.innerHTML = `<span class="toast-text">${msg}</span>`;
+    els.toastContainer.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
 }
 
-// ─── Keyboard Shortcut ───────────────────────────────────────
-document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-    e.preventDefault();
-    els.btnAnalyze.click();
-  }
-  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === 'Enter') {
-    e.preventDefault();
-    els.btnDoubleCheck.click();
-  }
-});
-
-// ─── Health & Uptime Logic ────────────────────────────────────
-let startTime = Date.now();
-
-function updateUptime() {
-  const diff = Math.floor((Date.now() - startTime) / 1000);
-  const h = Math.floor(diff / 3600).toString().padStart(2, '0');
-  const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
-  const s = (diff % 60).toString().padStart(2, '0');
-  if (els.healthUptime) els.healthUptime.textContent = `${h}:${m}:${s}`;
-}
-
-async function checkSystemHealth() {
-  try {
-    const res = await fetch(`${API}/api/health`);
-    const data = await res.json();
-    
-    if (data.status === 'ok') {
-      updateStatusIndicator(els.healthApi, true, 'Online');
-      // For the demo, let's assume Firebase/DB are online if the API is ok
-      // unless we want to add specific checks to the /api/health endpoint
-      updateStatusIndicator(els.healthFirebase, true, 'Connected');
-      updateStatusIndicator(els.healthDb, true, 'Ready');
-    } else {
-      updateStatusIndicator(els.healthApi, false, 'Error');
+async function updateRulesVersion() {
+    try {
+        const res = await fetch('/api/rules-metadata');
+        const data = await res.json();
+        if (data.mtime && els.rulesLastModified) {
+            const date = new Date(data.mtime);
+            els.rulesLastModified.innerText = date.toLocaleString();
+        }
+    } catch (e) {
+        console.error('Failed to sync rules version');
     }
-  } catch (err) {
-    updateStatusIndicator(els.healthApi, false, 'Offline');
-    updateStatusIndicator(els.healthFirebase, false, 'Disconnected');
-    updateStatusIndicator(els.healthDb, false, 'Unavailable');
-  }
 }
 
-function updateStatusIndicator(el, ok, text) {
-  if (!el) return;
-  el.classList.remove('status-online', 'status-offline');
-  el.classList.add(ok ? 'status-online' : 'status-offline');
-  el.querySelector('span').textContent = text;
+// ─── Health ──────────────────────────────────────────────────
+async function checkSystemHealth() {
+    try {
+        const res = await fetch('/api/health');
+        const data = await res.json();
+        if (data.status === 'ok') {
+            updateHealthUI('Api', true, 'Operational');
+            updateHealthUI('Firebase', true, 'Connected');
+            updateHealthUI('Db', true, 'Ready');
+        }
+    } catch (e) {
+        updateHealthUI('Api', false, 'Offline');
+    }
 }
 
-// Initial checks and loops
-setInterval(updateUptime, 1000);
-setInterval(checkSystemHealth, 30000); // Check every 30s
+function updateHealthUI(type, ok, text) {
+    const el = els[`health${type}`];
+    if (!el) return;
+    el.classList.toggle('online', ok);
+    el.classList.toggle('offline', !ok);
+}
+
+// ─── Init ────────────────────────────────────────────────────
+initRealtime();
+updateRulesVersion();
 checkSystemHealth();
+setInterval(updateRulesVersion, 10000);
+setInterval(checkSystemHealth, 30000);

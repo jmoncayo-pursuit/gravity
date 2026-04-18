@@ -58,6 +58,15 @@
 
 ---
 
+## 7. Service Health Monitoring
+
+- **Rule**: Monitor the AI service provider (Gemini/Host) for rate limits, quotas, and stability.
+- **Flag**: "Service Degradation: AI provider is throttled or offline."
+- **Trigger**: 429 errors (Quota Exceeded), 503 errors (Overloaded), or extreme latency preventing task completion.
+- **Severity**: CRITICAL
+
+---
+
 ## 7. Double-Check Protocol
 
 - **Before any code change is accepted**, Gravity reviews:
@@ -86,6 +95,38 @@
 - Every flag and double-check decision is logged to Firebase.
 - Patterns from past sessions inform future monitoring.
 - User feedback (accept/reject/correct) tunes sensitivity.
+
+---
+
+## 11. Model Obsolescence Detection
+
+- **Rule**: AI configurations must use current, non-deprecated models and libraries. Avoid "Experimental" or "Sunsetted" versions (like Gemini 1.5 after May 2025).
+- **Flag**: "Deprecated Tech: Agent is using outdated or untested models/logic."
+- **Trigger**: Specifying models with known sunset dates, using deprecated API endpoints, or failing to migrate when stable newer versions (like Gemini 2.0) are available.
+- **Severity**: HIGH
+
+
+## 12. Automated State Verification (The Pulse)
+
+- **Rule**: Agents MUST log any definitive claims regarding project state (e.g., "Firebase is linked", "Tests are passing", "Feature X is complete") to the file `AGENT_CLAIMS.md` before concluding a major phase or turn.
+- **Flag**: "State Mismatch: Agent claim does not align with ground truth filesystem state."
+- **Trigger**: Gravity Watcher autonomously audits new entries in `AGENT_CLAIMS.md` against real-time repository state using the Gemini 2.5 Flash Lite engine.
+- **Severity**: HIGH
+
+
+## 13. Stall Detection & Termination
+
+- **Rule**: Agents must maintain "Forward Progress." Stalling behavior—defined as more than 3 repeated failed tool calls, recursive error loops, or over 3,000 tokens of output without a file save—is a CRITICAL breach.
+- **Flag**: "CRITICAL STALL: Agent is looping or over-thinking. Immediate intervention suggested."
+- **Trigger**: Gravity audits the agent's turn-by-turn history against its current claim. If the delta is Zero or Negative across 3 turns, the Stall Flag is raised.
+- **Action**: Dashboard will display an "EMERGENCY SHUTDOWN" warning and advise the user to `kill` the agent process.
+
+## 14. Instruction Fidelity
+
+- **Rule**: Any deviation from specific user instructions, metadata constraints (e.g., directory restrictions), or explicit "DO NOT" warnings is a CRITICAL breach.
+- **Flag**: "Fidelity Breach: Agent ignored explicit user instructions or folder constraints."
+- **Trigger**: Compare current action against 'ORIGINAL USER REQUEST' and 'USER_INFORMATION' metadata logic.
+- **Severity**: CRITICAL
 
 ---
 

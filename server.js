@@ -1,13 +1,12 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, statSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { initFirebase, db } from './src/firebase.js';
 import { analyzeWithGemini } from './src/gemini.js';
 import { loadRules, syncRulesToFirebase, saveRules } from './src/rules.js';
-
 import { logFlag, logDoubleCheck, getHistory } from './src/history.js';
 
 dotenv.config();
@@ -15,9 +14,11 @@ dotenv.config();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3456;
+const RULES_FILE = join(process.cwd(), 'GRAVITY_RULES.md');
 
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(express.static(join(__dirname, 'public')));
 
 // ─── Health Check ────────────────────────────────────────────────
@@ -50,7 +51,6 @@ app.post('/api/rules', async (req, res) => {
 });
 
 // ─── Sync Rules to Firebase ─────────────────────────────────────
-
 app.post('/api/rules/sync', async (req, res) => {
   try {
     const rules = loadRules();
@@ -61,54 +61,63 @@ app.post('/api/rules/sync', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/rules-metadata
+ * Returns the last modified time of the rules file.
+ */
+app.get('/api/rules-metadata', (req, res) => {
+    try {
+        const stats = statSync(RULES_FILE);
+        res.json({ mtime: stats.mtime });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to read rules metadata' });
+    }
+});
+
 // ─── Analyze Artifact ────────────────────────────────────────────
-// Gravity's core: send artifact/terminal content for rule-checking
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { content, type, context, originalRequest } = req.body;
+    const { content, type, context, originalRequest, terminalOutput, history } = req.body;
     if (!content) {
       return res.status(400).json({ error: 'content is required' });
     }
 
     const rules = loadRules();
-    const history = await getHistory(10);
-
-    const analysis = await analyzeWithGemini({
+    const result = await analyzeWithGemini({
       content,
-      type: type || 'artifact',        // 'artifact' | 'terminal' | 'code_change'
+      type: type || 'artifact',
       context: context || '',
       originalRequest: originalRequest || '',
+      terminalOutput: terminalOutput || '',
       rules,
-      history,
+      history: history || [],
     });
 
-    // Log any flags
-    if (analysis.flags && analysis.flags.length > 0) {
-      for (const flag of analysis.flags) {
+    if (result.flags && result.flags.length > 0) {
+      for (const flag of result.flags) {
         await logFlag(flag);
       }
     }
 
-    res.json(analysis);
+    res.json(result);
   } catch (err) {
     console.error('Analysis error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── Double-Check Before Accept ──────────────────────────────────
+// ─── Double Check ────────────────────────────────────────────────
 app.post('/api/double-check', async (req, res) => {
   try {
-    const { codeChange, originalRequest, context, terminalOutput } = req.body;
-    if (!codeChange) {
-      return res.status(400).json({ error: 'codeChange is required' });
+    const { content, context, originalRequest, terminalOutput } = req.body;
+    if (!content) {
+      return res.status(400).json({ error: 'content is required' });
     }
 
     const rules = loadRules();
     const history = await getHistory(10);
-
-    const review = await analyzeWithGemini({
-      content: codeChange,
+    const result = await analyzeWithGemini({
+      content,
       type: 'double_check',
       context: context || '',
       originalRequest: originalRequest || '',
@@ -117,15 +126,7 @@ app.post('/api/double-check', async (req, res) => {
       history,
     });
 
-    // Log the double-check
-    await logDoubleCheck({
-      verdict: review.verdict,
-      reason: review.reason,
-      flags: review.flags || [],
-      timestamp: new Date().toISOString(),
-    });
-
-    res.json(review);
+    res.json(result);
   } catch (err) {
     console.error('Double-check error:', err);
     res.status(500).json({ error: err.message });
@@ -142,7 +143,6 @@ app.post('/api/correct', async (req, res) => {
 
     const rules = loadRules();
     const history = await getHistory(10);
-
     const correction = await analyzeWithGemini({
       content,
       type: 'correct',
@@ -154,18 +154,17 @@ app.post('/api/correct', async (req, res) => {
 
     res.json(correction);
   } catch (err) {
-    console.error('Correction error:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── Record User Decision (Accept/Reject/Correct) ───────────────
+// ─── Record User Decision ───────────────────────────────────────
 app.post('/api/decision', async (req, res) => {
   try {
     const { doubleCheckId, decision, correctionNotes } = req.body;
     await logDoubleCheck({
       doubleCheckId,
-      decision,       // 'accept' | 'reject' | 'correct'
+      decision,
       correctionNotes: correctionNotes || '',
       timestamp: new Date().toISOString(),
     });
@@ -175,11 +174,11 @@ app.post('/api/decision', async (req, res) => {
   }
 });
 
-// ─── Get Flag/Decision History ───────────────────────────────────
+// ─── Get History ────────────────────────────────────────────────
 app.get('/api/history', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 50;
-    const history = await getHistory(limit);
+    const limitCount = parseInt(req.query.limit) || 50;
+    const history = await getHistory(limitCount);
     res.json({ history });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -192,8 +191,7 @@ async function start() {
     await initFirebase();
     console.log('🔗 Firebase connected');
   } catch (err) {
-    console.warn('⚠️  Firebase not configured — running in local-only mode');
-    console.warn('   Set up .env with Firebase credentials to enable persistence.');
+    console.warn('⚠️  Firebase not configured — running in local mode');
   }
 
   app.listen(PORT, () => {

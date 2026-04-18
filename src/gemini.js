@@ -2,7 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemma-3-4b-it';
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
 /**
@@ -16,6 +16,13 @@ Your personality: Short. Direct. No fluff. You speak with authority like a fligh
 RULES TO ENFORCE:
 ${rules}
 
+Additional analysis directives:
+- AUDIT ALL RULES: Do not stop at the first violation. Check every rule (1-14).
+- SECURITY FIRST: Flag any hardcoded keys, secrets, or insecure practices as 'terminal_issue' (CRITICAL).
+- INSTRUCTION FIDELITY: Flag any metadata/instruction violations as 'fidelity_breach' (CRITICAL).
+- PATTERN RECOGNITION: Check for repeating mistakes from history.
+- SCOPE & BUSYWORK: Flag unasked features and placeholders.
+
 RESPONSE FORMAT (strict JSON only, no markdown fences):
 `;
 
@@ -25,9 +32,9 @@ RESPONSE FORMAT (strict JSON only, no markdown fences):
   "reason": "One sentence explaining the verdict",
   "flags": [
     {
-      "type": "drift|stall|terminal_issue|scope_expansion|overpromise|busywork",
+      "type": "drift|stall|terminal_issue|scope_expansion|overpromise|busywork|fidelity_breach",
       "message": "Short, direct flag message",
-      "severity": "HIGH|MEDIUM|LOW",
+      "severity": "HIGH|MEDIUM|LOW|CRITICAL",
       "why": ["bullet 1", "bullet 2", "bullet 3"]
     }
   ],
@@ -46,9 +53,9 @@ RESPONSE FORMAT (strict JSON only, no markdown fences):
   return base + `{
   "flags": [
     {
-      "type": "drift|stall|terminal_issue|scope_expansion|overpromise|busywork",
+      "type": "drift|stall|terminal_issue|scope_expansion|overpromise|busywork|fidelity_breach",
       "message": "Short, direct flag message",
-      "severity": "HIGH|MEDIUM|LOW",
+      "severity": "HIGH|MEDIUM|LOW|CRITICAL",
       "why": ["bullet 1", "bullet 2", "bullet 3"]
     }
   ],
@@ -141,7 +148,6 @@ async function analyzeWithGemini({ content, type, context, originalRequest, term
     generationConfig: {
       temperature: 0.3,
       maxOutputTokens: 8192,
-      responseMimeType: 'application/json',
     }
   };
 
@@ -198,12 +204,17 @@ async function analyzeWithGemini({ content, type, context, originalRequest, term
     }
   } catch (err) {
     console.error('Gemini analysis error:', err.message);
+    const isServiceIssue = err.message.includes('503') || err.message.includes('429') || err.message.includes('UNAVAILABLE');
     return {
       flags: [{
-        type: 'terminal_issue',
+        type: isServiceIssue ? 'service_health' : 'terminal_issue',
         message: `Gravity analysis error: ${err.message}`,
-        severity: 'LOW',
-        why: ['Gemini API call failed', 'Check API key and connectivity', 'System will retry on next analysis']
+        severity: isServiceIssue ? 'CRITICAL' : 'LOW',
+        why: [
+          err.message,
+          'Gemini API experienced high demand or quota limits',
+          'Gravity has switched to a high-quota stable model'
+        ]
       }],
       summary: 'Analysis encountered an error.',
       verdict: type === 'double_check' ? 'GO' : undefined,
